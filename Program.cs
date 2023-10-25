@@ -1,145 +1,242 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 class Program
 {
     static void Main(string[] args)
     {
-        Dictionary<string, int> votingOptions = new Dictionary<string, int>();
-        bool votingOpen = true;
+        Console.WindowHeight = 16;
+        Console.WindowWidth = 32;
+        int screenwidth = Console.WindowWidth;
+        int screenheight = Console.WindowHeight;
+        Random random = new Random();
 
-        Console.WriteLine("Welcome to the Voting System!");
+        SnakeGame game = new SnakeGame(screenwidth, screenheight);
 
-        while (votingOpen)
-        {
-            Console.WriteLine("\nMenu:");
-            Console.WriteLine("1. Create a New Voting Topic");
-            Console.WriteLine("2. Vote");
-            Console.WriteLine("3. View Results");
-            Console.WriteLine("4. Exit");
+        game.Start();
+    }
+}
 
-            Console.Write("Enter your choice: ");
-            string choice = Console.ReadLine();
+class SnakeGame
+{
+    private int screenwidth;
+    private int screenheight;
+    private Random random;
+    private Queue<Position> snake;
+    private int snakeLength;
+    private int score;
+    private bool gameOver;
+    private List<Position> foods;
+    private Direction direction;
 
-            switch (choice)
-            {
-                case "1":
-                    CreateVotingTopic(votingOptions);
-                    break;
-                case "2":
-                    Vote(votingOptions);
-                    break;
-                case "3":
-                    ViewResults(votingOptions);
-                    break;
-                case "4":
-                    votingOpen = false;
-                    break;
-                default:
-                    Console.WriteLine("Invalid choice. Please select a valid option.");
-                    break;
-            }
-        }
+    public SnakeGame(int width, int height)
+    {
+        screenwidth = width;
+        screenheight = height;
+        random = new Random();
 
-        Console.WriteLine("Thank you for using the Voting System!");
+        snake = new Queue<Position>();
+        snake.Enqueue(new Position(screenwidth / 2, screenheight / 2));
+        snakeLength = 1;
+        score = 0;
+        gameOver = false;
+
+        foods = new List<Position>();
+        SpawnFood(foods, random, screenwidth, screenheight, 3);
+
+        direction = Direction.Right;
+        DrawRedBricks(screenwidth, screenheight);
     }
 
-    static void CreateVotingTopic(Dictionary<string, int> options)
+    public void Start()
     {
-        Console.Write("Enter the voting topic: ");
-        string topic = Console.ReadLine();
-
-        if (options.ContainsKey(topic))
+        while (!gameOver)
         {
-            Console.WriteLine("This topic already exists.");
-        }
-        else
-        {
-            Console.Write("Enter the number of options: ");
-            if (int.TryParse(Console.ReadLine(), out int optionCount) && optionCount > 0)
+            if (Console.KeyAvailable)
             {
-                List<string> optionList = new List<string>();
+                var key = Console.ReadKey(true).Key;
+                ChangeDirection(key);
+            }
 
-                for (int i = 1; i <= optionCount; i++)
-                {
-                    Console.Write($"Enter option {i}: ");
-                    string option = Console.ReadLine();
-                    optionList.Add(option);
-                    options.Add(option, 0);
-                }
+            Position head = snake.Last();
+            Position newHead = CalculateNewHeadPosition(head, direction);
 
-                Console.WriteLine($"Voting topic '{topic}' with {optionCount} options created successfully!");
+            if (IsCollision(newHead))
+            {
+                gameOver = true;
+                break;
+            }
+
+            snake.Enqueue(newHead);
+            Console.SetCursorPosition(newHead.X, newHead.Y);
+            Console.Write("■");
+
+            bool foodEaten = CheckFoodCollision(newHead);
+            if (foodEaten)
+            {
+                SpawnFood(foods, random, screenwidth, screenheight, 2);
             }
             else
             {
-                Console.WriteLine("Invalid input. Please enter a valid number of options.");
-            }
-        }
-    }
-
-    static void Vote(Dictionary<string, int> options)
-    {
-        Console.WriteLine("Available Voting Topics:");
-        int topicCount = 1;
-
-        foreach (string topic in options.Keys.Distinct())
-        {
-            Console.WriteLine($"{topicCount}. {topic}");
-            topicCount++;
-        }
-
-        Console.Write("Select a topic to vote: ");
-        if (int.TryParse(Console.ReadLine(), out int topicIndex) && topicIndex > 0 && topicIndex <= options.Keys.Distinct().Count())
-        {
-            string selectedTopic = options.Keys.Distinct().ElementAt(topicIndex - 1);
-
-            Console.WriteLine($"Options for '{selectedTopic}':");
-            int optionCount = 1;
-
-            foreach (var option in options.Where(kvp => kvp.Key == selectedTopic))
-            {
-                Console.WriteLine($"{optionCount}. {option.Key}");
-                optionCount++;
-            }
-
-            Console.Write("Select an option to vote: ");
-            if (int.TryParse(Console.ReadLine(), out int optionIndex) && optionIndex > 0 && optionIndex <= optionCount - 1)
-            {
-                string selectedOption = options.Where(kvp => kvp.Key == selectedTopic).ElementAt(optionIndex - 1).Key;
-                options[selectedOption]++;
-                Console.WriteLine($"You voted for '{selectedOption}'.");
-            }
-            else
-            {
-                Console.WriteLine("Invalid option selection. Please enter a valid option.");
-            }
-        }
-        else
-        {
-            Console.WriteLine("Invalid topic selection. Please enter a valid topic.");
-        }
-    }
-
-    static void ViewResults(Dictionary<string, int> options)
-    {
-        Console.WriteLine("\nVoting Results:");
-
-        if (options.Count == 0)
-        {
-            Console.WriteLine("No voting topics available.");
-        }
-        else
-        {
-            foreach (var topic in options.Keys.Distinct())
-            {
-                Console.WriteLine($"Topic: {topic}");
-                foreach (var option in options.Where(kvp => kvp.Key == topic))
+                if (snake.Count > snakeLength)
                 {
-                    Console.WriteLine($"{option.Key}: {option.Value} votes");
+                    var tail = snake.Dequeue();
+                    Console.SetCursorPosition(tail.X, tail.Y);
+                    Console.Write(" ");
                 }
-                Console.WriteLine();
+            }
+
+            DrawFoods();
+
+            Thread.Sleep(150);
+        }
+
+        GameOver(score);
+        Console.SetCursorPosition(10, 12);
+        Console.Write("Play again? (Y/N): ");
+        char playAgain = Console.ReadKey(true).KeyChar;
+        if (playAgain == 'Y' || playAgain == 'y')
+        {
+            Console.Clear();
+            Start();
+        }
+    }
+
+    private void ChangeDirection(ConsoleKey key)
+    {
+        switch (key)
+        {
+            case ConsoleKey.UpArrow:
+            case ConsoleKey.W:
+                if (direction != Direction.Down)
+                    direction = Direction.Up;
+                break;
+            case ConsoleKey.DownArrow:
+            case ConsoleKey.S:
+                if (direction != Direction.Up)
+                    direction = Direction.Down;
+                break;
+            case ConsoleKey.LeftArrow:
+            case ConsoleKey.A:
+                if (direction != Direction.Right)
+                    direction = Direction.Left;
+                break;
+            case ConsoleKey.RightArrow:
+            case ConsoleKey.D:
+                if (direction != Direction.Left)
+                    direction = Direction.Right;
+                break;
+        }
+    }
+
+    private Position CalculateNewHeadPosition(Position head, Direction direction)
+    {
+        switch (direction)
+        {
+            case Direction.Up:
+                return new Position(head.X, head.Y - 1);
+            case Direction.Down:
+                return new Position(head.X, head.Y + 1);
+            case Direction.Left:
+                return new Position(head.X - 1, head.Y);
+            case Direction.Right:
+                return new Position(head.X + 1, head.Y);
+            default:
+                return head;
+        }
+    }
+
+    private bool IsCollision(Position newHead)
+    {
+        return newHead.X == 0 || newHead.X >= screenwidth - 1 || newHead.Y == 0 || newHead.Y >= screenheight - 1 || snake.Contains(newHead);
+    }
+
+    private bool CheckFoodCollision(Position newHead)
+    {
+        foreach (var food in foods)
+        {
+            if (newHead.Equals(food))
+            {
+                score++;
+                snakeLength++;
+                foods.Remove(food);
+                return true;
             }
         }
+        return false;
+    }
+
+    private void DrawFoods()
+    {
+        foreach (var food in foods)
+        {
+            Console.SetCursorPosition(food.X, food.Y);
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.Write("■");
+        }
+    }
+
+    private void GameOver(int score)
+    {
+        Console.Clear();
+        Console.SetCursorPosition(10, 10);
+        Console.WriteLine("Game over! Your score: " + score);
+    }
+
+    private void SpawnFood(List<Position> foods, Random random, int screenwidth, int screenheight, int count)
+    {
+        foods.Clear();
+        for (int i = 0; i < count; i++)
+        {
+            int x = random.Next(1, screenwidth - 1);
+            int y = random.Next(1, screenheight - 1);
+            foods.Add(new Position(x, y));
+        }
+    }
+
+    private void DrawRedBricks(int screenWidth, int screenHeight)
+    {
+        Console.ForegroundColor = ConsoleColor.Red;
+        for (int i = 0; i < screenWidth; i++)
+        {
+            Console.SetCursorPosition(i, 0);
+            Console.Write("■");
+            Console.SetCursorPosition(i, screenHeight - 1);
+            Console.Write("■");
+        }
+        for (int i = 0; i < screenHeight; i++)
+        {
+            Console.SetCursorPosition(0, i);
+            Console.Write("■");
+            Console.SetCursorPosition(screenWidth - 1, i);
+            Console.Write("■");
+        }
+    }
+}
+
+enum Direction
+{
+    Up,
+    Down,
+    Left,
+    Right
+}
+
+struct Position
+{
+    public int X { get; }
+    public int Y { get; }
+    public Position(int x, int y)
+    {
+        X = x;
+        Y = y;
+    }
+
+    public bool Equals(Position other)
+    {
+        return X == other.X && Y == other.Y;
     }
 }
